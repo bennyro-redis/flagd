@@ -15,6 +15,7 @@ import (
 	"github.com/open-feature/flagd/core/pkg/sync/grpc/credentials"
 	httpSync "github.com/open-feature/flagd/core/pkg/sync/http"
 	"github.com/open-feature/flagd/core/pkg/sync/kubernetes"
+	"github.com/open-feature/flagd/core/pkg/sync/redis"
 	"github.com/robfig/cron"
 	"go.uber.org/zap"
 	"gocloud.dev/blob"
@@ -33,6 +34,7 @@ const (
 	syncProviderGcs        = "gcs"
 	syncProviderAzblob     = "azblob"
 	syncProviderS3         = "s3"
+	syncProviderRedis      = "redis"
 )
 
 var (
@@ -45,6 +47,7 @@ var (
 	regGcs                *regexp.Regexp
 	regAzblob             *regexp.Regexp
 	regS3                 *regexp.Regexp
+	regRedis              *regexp.Regexp
 )
 
 func init() {
@@ -57,6 +60,7 @@ func init() {
 	regGcs = regexp.MustCompile("^gs://.+?/")
 	regAzblob = regexp.MustCompile("^azblob://.+?/")
 	regS3 = regexp.MustCompile("^s3://.+?/")
+	regRedis = regexp.MustCompile("^rediss?://")
 }
 
 type ISyncBuilder interface {
@@ -81,6 +85,8 @@ func (sb *SyncBuilder) SyncFromURI(uri string, logger *logger.Logger) (sync.ISyn
 		return sb.newFile(uri, logger), nil
 	case regCrd.Match(uriB):
 		return sb.newK8s(uri, logger)
+	case regRedis.Match(uriB):
+		return sb.newRedis(uri, logger)
 	}
 	return nil, fmt.Errorf("unrecognized URI: %s", uri)
 }
@@ -125,12 +131,15 @@ func (sb *SyncBuilder) syncFromConfig(sourceConfig sync.SourceConfig, logger *lo
 	case syncProviderS3:
 		logger.Debug(fmt.Sprintf("using blob sync-provider with s3 driver for: %s", sourceConfig.URI))
 		return sb.newS3(sourceConfig, logger), nil
+	case syncProviderRedis:
+		logger.Debug(fmt.Sprintf("using redis sync-provider for: %s", sourceConfig.URI))
+		return sb.newRedisFromConfig(sourceConfig, logger)
 
 	default:
 		return nil, fmt.Errorf("invalid sync provider: %s, must be one of with "+
-			"'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' or '%s'",
+			"'%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s', '%s' or '%s'",
 			sourceConfig.Provider, syncProviderFile, syncProviderFsNotify, syncProviderFileInfo,
-			syncProviderKubernetes, syncProviderHTTP, syncProviderGrpc, syncProviderGcs, syncProviderAzblob, syncProviderS3)
+			syncProviderKubernetes, syncProviderHTTP, syncProviderGrpc, syncProviderGcs, syncProviderAzblob, syncProviderS3, syncProviderRedis)
 	}
 }
 
@@ -316,6 +325,28 @@ func (sb *SyncBuilder) newS3(config sync.SourceConfig, logger *logger.Logger) *b
 		Interval: interval,
 		Cron:     cron.New(),
 	}
+}
+
+func (sb *SyncBuilder) newRedis(uri string, logger *logger.Logger) (sync.ISync, error) {
+	redisSyncProvider, err := redis.NewRedisSync(uri, logger.WithFields(
+		zap.String("component", "sync"),
+		zap.String("sync", syncProviderRedis),
+	))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Redis sync: %w", err)
+	}
+	return redisSyncProvider, nil
+}
+
+func (sb *SyncBuilder) newRedisFromConfig(config sync.SourceConfig, logger *logger.Logger) (sync.ISync, error) {
+	redisSyncProvider, err := redis.NewRedisSyncFromConfig(config, logger.WithFields(
+		zap.String("component", "sync"),
+		zap.String("sync", syncProviderRedis),
+	))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Redis sync: %w", err)
+	}
+	return redisSyncProvider, nil
 }
 
 type IK8sClientBuilder interface {

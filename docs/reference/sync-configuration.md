@@ -86,6 +86,7 @@ Sync providers:
 - `grpc`(envoy) - envoy://localhost:9211/test.service
 - `gcs` - gs://my-bucket/my-flags.json
 - `azblob` - azblob://my-container/my-flags.json
+- `redis` - redis://localhost:6379/0?key=flags
 
 Startup command:
 
@@ -138,4 +139,7 @@ sources:
     provider: gcs
   - uri: azblob://my-container/my-flags.json
     provider: azblob
+  - uri: redis://localhost:6379/0?key=flags
+    provider: redis
+    interval: 30
 ```

@@ -244,6 +244,18 @@ func TestParseSyncProviderURIs(t *testing.T) {
 			expectErr: false,
 			out:       []sync.SourceConfig{},
 		},
+		"redis": {
+			in: []string{
+				"redis://localhost:6379/0?key=flags",
+			},
+			expectErr: false,
+			out: []sync.SourceConfig{
+				{
+					URI:      "redis://localhost:6379/0?key=flags",
+					Provider: "redis",
+				},
+			},
+		},
 		"parse-failure": {
 			in:        []string{"care.openfeature.dev/will/fail"},
 			expectErr: true,

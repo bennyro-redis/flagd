@@ -120,6 +120,35 @@ In this example, `s3://my-bucket/my-flags.json` is expected to be a valid URI ac
 The polling interval is configurable.
 See [sync source](../reference/sync-configuration.md#source-configuration) for details.
 
+### Redis sync
+
+The Redis sync provider fetches flags from a Redis key and periodically polls the key for flag definition updates.
+The flags should be stored as a JSON string in Redis.
+
+```shell
+flagd start --uri redis://localhost:6379/0?key=flags
+```
+
+In this example:
+- `redis://localhost:6379` is the Redis server address
+- `/0` specifies database 0 (optional, defaults to 0)
+- `?key=flags` specifies the Redis key containing the flag definitions
+
+For Redis with authentication:
+
+```shell
+flagd start --uri redis://user:password@localhost:6379/0?key=flags
+```
+
+For Redis with TLS:
+
+```shell
+flagd start --uri rediss://localhost:6380/0?key=flags
+```
+
+The polling interval can be configured using the `interval` parameter in the source configuration.
+See [sync source](../reference/sync-configuration.md#source-configuration) configuration for details.
+
 ## Merging
 
 Flagd can be configured to read from multiple sources at once, when this is the case flagd will merge all flag definition into a single
