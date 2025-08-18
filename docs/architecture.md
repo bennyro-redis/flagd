@@ -28,6 +28,8 @@ erDiagram
     flagd ||--o{ "sync (http)" : polls
     flagd ||--o{ "sync (grpc)" : "sync.proto (gRPC/stream)"
     flagd ||--o{ "sync (kubernetes)" : watches
+    flagd ||--o{ "sync (gcs)" : polls
+    flagd ||--o{ "sync (redis)" : polls
     "client app (+ flagd RPC provider)" ||--|| flagd : "evaluation.proto (gRPC/stream) / HTTP"
 ```
 
