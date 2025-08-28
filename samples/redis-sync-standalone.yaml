@@ -1,0 +1,218 @@
+# Example configuration for standalone Redis sync service
+# This shows how to run Redis sync as a standalone gRPC service
+
+# 1. Start the standalone Redis sync service
+# flagd redis-sync --redis-uri="redis://localhost:6379/0?key=flags" --redis-sync-port=8016
+
+# 2. Configure flagd to use the Redis sync service as a gRPC source
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: flagd-config
+data:
+  flagd.yaml: |
+    sources:
+      - uri: "localhost:8016"
+        provider: "grpc"
+        selector: ""
+    
+    # Optional: Configure other settings
+    port: 8013
+    sync-port: 8015
+    management-port: 8014
+
+---
+# Example Redis flag configuration that would be stored in Redis
+# Key: flags (as specified in redis-uri parameter)
+# Value: JSON configuration below
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: redis-flags-example
+data:
+  flags.json: |
+    {
+      "flags": {
+        "welcome-message": {
+          "state": "ENABLED",
+          "variants": {
+            "on": "Welcome to our application!",
+            "off": "Application is under maintenance"
+          },
+          "defaultVariant": "on"
+        },
+        "feature-x-enabled": {
+          "state": "ENABLED",
+          "variants": {
+            "on": true,
+            "off": false
+          },
+          "defaultVariant": "off",
+          "targeting": {
+            "if": [
+              {
+                "in": ["beta", {"var": "user.groups"}]
+              },
+              "on",
+              "off"
+            ]
+          }
+        },
+        "theme-color": {
+          "state": "ENABLED",
+          "variants": {
+            "blue": "#0066cc",
+            "green": "#00cc66",
+            "red": "#cc0066"
+          },
+          "defaultVariant": "blue",
+          "targeting": {
+            "fractional": [
+              {"var": "user.id"},
+              [
+                ["blue", 34],
+                ["green", 33],
+                ["red", 33]
+              ]
+            ]
+          }
+        }
+      },
+      "$evaluators": {
+        "fractional": 0.1
+      }
+    }
+
+---
+# Docker Compose example for running Redis + Redis Sync Service + Flagd
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: docker-compose-example
+data:
+  docker-compose.yml: |
+    version: '3.8'
+    services:
+      redis:
+        image: redis:7-alpine
+        ports:
+          - "6379:6379"
+        command: redis-server --appendonly yes
+        volumes:
+          - redis-data:/data
+      
+      redis-sync:
+        image: flagd:latest
+        command: ["flagd", "redis-sync", 
+                  "--redis-uri=redis://redis:6379/0?key=flags",
+                  "--redis-sync-port=8016",
+                  "--redis-interval=30"]
+        ports:
+          - "8016:8016"
+        depends_on:
+          - redis
+        environment:
+          - FLAGD_REDIS_LOG_FORMAT=json
+      
+      flagd:
+        image: flagd:latest
+        command: ["flagd", "start",
+                  "--sources=[{\"uri\":\"redis-sync:8016\",\"provider\":\"grpc\"}]",
+                  "--port=8013",
+                  "--sync-port=8015"]
+        ports:
+          - "8013:8013"  # gRPC evaluation
+          - "8014:8014"  # HTTP evaluation
+          - "8015:8015"  # gRPC sync stream
+        depends_on:
+          - redis-sync
+    
+    volumes:
+      redis-data:
+
+---
+# Kubernetes deployment example
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-sync-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis-sync-service
+  template:
+    metadata:
+      labels:
+        app: redis-sync-service
+    spec:
+      containers:
+      - name: redis-sync
+        image: flagd:latest
+        command: ["flagd", "redis-sync"]
+        args:
+          - "--redis-uri=redis://redis-service:6379/0?key=flags"
+          - "--redis-sync-port=8016"
+          - "--redis-interval=30"
+        ports:
+        - containerPort: 8016
+          name: grpc-sync
+        env:
+        - name: FLAGD_REDIS_LOG_FORMAT
+          value: "json"
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "100m"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-sync-service
+spec:
+  selector:
+    app: redis-sync-service
+  ports:
+  - port: 8016
+    targetPort: 8016
+    name: grpc-sync
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flagd
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: flagd
+  template:
+    metadata:
+      labels:
+        app: flagd
+    spec:
+      containers:
+      - name: flagd
+        image: flagd:latest
+        command: ["flagd", "start"]
+        args:
+          - "--sources=[{\"uri\":\"redis-sync-service:8016\",\"provider\":\"grpc\"}]"
+        ports:
+        - containerPort: 8013
+          name: grpc-eval
+        - containerPort: 8014
+          name: http-eval
+        - containerPort: 8015
+          name: grpc-sync
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"

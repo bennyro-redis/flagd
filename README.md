@@ -87,7 +87,7 @@ Experiment with flagd in your browser using [the Killercoda tutorial](https://ki
       --uri file:./etc/flagd/example_flags.flagd.json
     ```
 
-    `--uri` can be a local file or any remote endpoint. Use `file:` prefix for local files. eg. `--uri file:/path/to/example_flags.flagd.json`. `gRPC` and `http` have their own requirements. More information can be found [here](https://flagd.dev/concepts/syncs/).
+    `--uri` can be a local file, any remote endpoint, or a redis database. Use `file:` prefix for local files. eg. `--uri file:/path/to/example_flags.flagd.json`. `gRPC`, `http` and `redis` have their own requirements. More information can be found [here](./docs/concepts/syncs.md).
 
     Multiple `--uri` parameters can be specified. In other words, flagd can retrieve flags from multiple sources simultaneously.
 
